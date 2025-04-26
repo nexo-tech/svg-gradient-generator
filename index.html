@@ -1,66 +1,179 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SVG Gradient Generator</title>
-    <link rel="stylesheet" href="styles.css">
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Interactive SVG Gradients + Turbulence & Blur</title>
+  <style>
+    body { margin:0; font-family:sans-serif; overflow:hidden; }
+    #controls {
+      position:fixed; top:10px; left:10px;
+      background:rgba(255,255,255,0.9); padding:12px;
+      border-radius:6px; width:260px; max-height:90vh; overflow:auto;
+      box-shadow:0 2px 8px rgba(0,0,0,0.2);
+    }
+    #controls button { width:100%; margin:4px 0; }
+    .panel { border:1px solid #ccc; padding:6px; margin:6px 0; border-radius:4px; }
+    .panel label { display:block; margin:4px 0; font-size:13px; }
+    svg { width:100vw; height:100vh; background:#111; cursor: grab; }
+    svg:active { cursor: grabbing; }
+  </style>
 </head>
 <body>
-    <div class="container">
-        <header>
-            <h1>SVG Gradient Generator</h1>
-            <p>Create beautiful gradients for your blog post covers</p>
-        </header>
 
-        <main>
-            <div class="controls">
-                <div class="color-pickers">
-                    <div class="color-group">
-                        <label>Start Color</label>
-                        <input type="color" id="startColor" value="#4a00e0">
-                    </div>
-                    <div class="color-group">
-                        <label>End Color</label>
-                        <input type="color" id="endColor" value="#8e2de2">
-                    </div>
-                </div>
+  <div id="controls">
+    <button id="add">+ Add Gradient</button>
+    <div id="panels"></div>
+    <button id="dl">Download SVG</button>
+  </div>
 
-                <div class="size-controls">
-                    <div class="slider-group">
-                        <label>Width (px)</label>
-                        <input type="range" id="width" min="400" max="2000" value="1200" step="100">
-                        <span class="value-display" id="widthValue">1200px</span>
-                    </div>
-                    <div class="slider-group">
-                        <label>Height (px)</label>
-                        <input type="range" id="height" min="200" max="1200" value="630" step="50">
-                        <span class="value-display" id="heightValue">630px</span>
-                    </div>
-                </div>
+  <svg id="svgroot" xmlns="http://www.w3.org/2000/svg">
+    <defs id="defs"></defs>
+    <g id="circles"></g>
+  </svg>
 
-                <div class="sliders">
-                    <div class="slider-group">
-                        <label>Cloud Density</label>
-                        <input type="range" id="cloudDensity" min="1" max="10" value="5">
-                        <span class="value-display" id="cloudDensityValue">5</span>
-                    </div>
-                    <div class="slider-group">
-                        <label>Distortion Level</label>
-                        <input type="range" id="distortionLevel" min="0" max="100" value="30">
-                        <span class="value-display" id="distortionLevelValue">30</span>
-                    </div>
-                </div>
+  <script>
+    const svgNS = "http://www.w3.org/2000/svg";
+    const defs = document.getElementById("defs");
+    const grp  = document.getElementById("circles");
+    const panels = document.getElementById("panels");
+    let circles = [], dragging = null;
 
-                <button id="generateBtn">Generate Gradient</button>
-                <button id="downloadBtn">Download SVG</button>
-            </div>
+    function makePanel(c){
+      const div = document.createElement("div");
+      div.className = "panel";
+      div.dataset.id = c.id;
+      div.innerHTML = `
+        <label>Color:<input type="color" data-prop="color" value="${c.color}"></label>
+        <label>Radius (%):<input type="range" min="1" max="50" data-prop="r" value="${c.r}"></label>
+        <label>TurbFreq:<input type="range" min="0" max="0.2" step="0.005" data-prop="freq" value="${c.freq}"></label>
+        <label>DispScale:<input type="range" min="0" max="200" data-prop="scale" value="${c.scale}"></label>
+        <label>Blur:<input type="range" min="0" max="50" data-prop="blur" value="${c.blur}"></label>
+        <button data-remove>Remove</button>
+      `;
+      panels.appendChild(div);
+    }
 
-            <div class="preview">
-                <div id="gradientPreview"></div>
-            </div>
-        </main>
-    </div>
-    <script src="script.js"></script>
+    function renderControls(){
+      panels.innerHTML = "";
+      circles.forEach(makePanel);
+    }
+
+    function buildFiltersAndCircles(){
+      defs.innerHTML = ""; grp.innerHTML = "";
+      circles.forEach(c=>{
+        // radial gradient
+        const grad = document.createElementNS(svgNS, "radialGradient");
+        grad.id = "g" + c.id;
+        // gradient stops
+        const stop1 = document.createElementNS(svgNS, "stop");
+        stop1.setAttribute("offset", "0%");
+        stop1.setAttribute("stop-color", c.color);
+        stop1.setAttribute("stop-opacity", "1");
+        grad.appendChild(stop1);
+
+        const stop2 = document.createElementNS(svgNS, "stop");
+        stop2.setAttribute("offset", "100%");
+        stop2.setAttribute("stop-color", c.color);
+        stop2.setAttribute("stop-opacity", "0");
+        grad.appendChild(stop2);
+
+        defs.appendChild(grad);
+
+        // filter
+        const f = document.createElementNS(svgNS,"filter");
+        f.id = "f"+c.id;
+        f.setAttribute("filterUnits","userSpaceOnUse");
+        f.setAttribute("x","-100%"); f.setAttribute("y","-100%");
+        f.setAttribute("width","300%"); f.setAttribute("height","300%");
+
+        const turb = document.createElementNS(svgNS,"feTurbulence");
+        turb.setAttribute("type","fractalNoise");
+        turb.setAttribute("baseFrequency",c.freq);
+        turb.setAttribute("numOctaves","4");
+        turb.setAttribute("result","turb");
+        f.appendChild(turb);
+
+        const disp = document.createElementNS(svgNS,"feDisplacementMap");
+        disp.setAttribute("in","SourceGraphic");
+        disp.setAttribute("in2","turb");
+        disp.setAttribute("scale",c.scale);
+        disp.setAttribute("result","disp");
+        f.appendChild(disp);
+
+        const blur = document.createElementNS(svgNS,"feGaussianBlur");
+        blur.setAttribute("in","disp");
+        blur.setAttribute("stdDeviation",c.blur);
+        f.appendChild(blur);
+
+        defs.appendChild(f);
+
+        // circle with gradient fill + filter
+        const cir = document.createElementNS(svgNS,"circle");
+        cir.setAttribute("cx",c.cx+"%");
+        cir.setAttribute("cy",c.cy+"%");
+        cir.setAttribute("r", c.r +"%");
+        cir.setAttribute("fill","url(#g"+c.id+")");
+        cir.setAttribute("filter","url(#f"+c.id+")");
+        cir.dataset.id = c.id;
+        grp.appendChild(cir);
+
+        cir.addEventListener("mousedown", ()=> dragging = c.id);
+      });
+    }
+
+    function redraw(){ buildFiltersAndCircles(); renderControls(); }
+
+    // add new gradient circle
+    document.getElementById("add").onclick = ()=>{
+      const id = Date.now();
+      circles.push({ id, cx:50, cy:50, r:20, color:"#ff0066", freq:0.02, scale:50, blur:15 });
+      redraw();
+    };
+
+    // control changes
+    panels.addEventListener("input", e=>{
+      const pid = +e.target.closest(".panel").dataset.id;
+      const prop = e.target.dataset.prop;
+      let val = e.target.value;
+      if(prop!="color") val = parseFloat(val);
+      circles = circles.map(c=> c.id===pid ? {...c, [prop]: val} : c);
+      buildFiltersAndCircles();
+    });
+
+    // remove
+    panels.addEventListener("click", e=>{
+      if(e.target.dataset.remove!==undefined){
+        const pid = +e.target.closest(".panel").dataset.id;
+        circles = circles.filter(c=>c.id!==pid);
+        redraw();
+      }
+    });
+
+    // drag
+    window.addEventListener("mousemove", e=>{
+      if(dragging===null) return;
+      const c = circles.find(x=>x.id===dragging);
+      c.cx = e.clientX/window.innerWidth*100;
+      c.cy = e.clientY/window.innerHeight*100;
+      buildFiltersAndCircles();
+    });
+    window.addEventListener("mouseup", ()=> dragging = null);
+
+    // download
+    document.getElementById("dl").onclick = ()=>{
+      const svg = document.getElementById("svgroot");
+      const s = '<?xml version="1.0"?>\n' + new XMLSerializer().serializeToString(svg);
+      const blob = new Blob([s],{type:"image/svg+xml"});
+      const url  = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href=url; a.download="gradients.svg";
+      document.body.appendChild(a); a.click();
+      a.remove(); URL.revokeObjectURL(url);
+    };
+
+    // init
+    redraw();
+  </script>
 </body>
-</html> 
+</html>
