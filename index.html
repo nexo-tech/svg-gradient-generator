@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SVG Gradient Generator</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>SVG Gradient Generator</h1>
+            <p>Create beautiful gradients for your blog post covers</p>
+        </header>
+
+        <main>
+            <div class="controls">
+                <div class="color-pickers">
+                    <div class="color-group">
+                        <label>Start Color</label>
+                        <input type="color" id="startColor" value="#4a00e0">
+                    </div>
+                    <div class="color-group">
+                        <label>End Color</label>
+                        <input type="color" id="endColor" value="#8e2de2">
+                    </div>
+                </div>
+
+                <div class="size-controls">
+                    <div class="slider-group">
+                        <label>Width (px)</label>
+                        <input type="range" id="width" min="400" max="2000" value="1200" step="100">
+                        <span class="value-display" id="widthValue">1200px</span>
+                    </div>
+                    <div class="slider-group">
+                        <label>Height (px)</label>
+                        <input type="range" id="height" min="200" max="1200" value="630" step="50">
+                        <span class="value-display" id="heightValue">630px</span>
+                    </div>
+                </div>
+
+                <div class="sliders">
+                    <div class="slider-group">
+                        <label>Cloud Density</label>
+                        <input type="range" id="cloudDensity" min="1" max="10" value="5">
+                        <span class="value-display" id="cloudDensityValue">5</span>
+                    </div>
+                    <div class="slider-group">
+                        <label>Distortion Level</label>
+                        <input type="range" id="distortionLevel" min="0" max="100" value="30">
+                        <span class="value-display" id="distortionLevelValue">30</span>
+                    </div>
+                </div>
+
+                <button id="generateBtn">Generate Gradient</button>
+                <button id="downloadBtn">Download SVG</button>
+            </div>
+
+            <div class="preview">
+                <div id="gradientPreview"></div>
+            </div>
+        </main>
+    </div>
+    <script src="script.js"></script>
+</body>
+</html> 
