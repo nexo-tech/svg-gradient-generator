@@ -9,7 +9,7 @@
     #controls {
       position:fixed; top:10px; left:10px;
       background:rgba(255,255,255,0.9); padding:12px;
-      border-radius:6px; width:300px; max-height:90vh; overflow:auto;
+      border-radius:4px; width:300px; max-height:90vh; overflow:auto;
       box-shadow:0 2px 8px rgba(0,0,0,0.2);
     }
     #controls button { width:100%; margin:4px 0; }
@@ -43,19 +43,24 @@
     const panels = document.getElementById("panels");
     const basePanel = document.getElementById("base-panel");
 
-    let circles = [];
+    // load or init state
+    let circles = JSON.parse(localStorage.getItem('circles') || '[]');
+    let baseSettings = JSON.parse(localStorage.getItem('baseSettings') ||
+      JSON.stringify({ type: 'color', color1: '#111111', color2: '#222222', angle: 90 })
+    );
     let dragging = null;
-    let baseSettings = { type: 'color', color1: '#111111', color2: '#222222', angle: 90 };
 
-    // Handle base panel changes
-    function handleBaseChange(e) {
-      const prop = e.target.dataset.prop;
-      if (!prop) return;
-      baseSettings[prop] = prop === 'angle' ? parseFloat(e.target.value) : e.target.value;
-      redraw();
+    function saveState() {
+      localStorage.setItem('circles', JSON.stringify(circles));
+      localStorage.setItem('baseSettings', JSON.stringify(baseSettings));
     }
 
-    // Render base controls
+    function handleBaseChange(e) {
+      const prop = e.target.dataset.prop; if(!prop) return;
+      baseSettings[prop] = prop==='angle' ? parseFloat(e.target.value) : e.target.value;
+      saveState(); redraw();
+    }
+
     function makeBasePanel() {
       basePanel.innerHTML = `
         <label>Background Type:
@@ -68,14 +73,12 @@
         <label>Color 2:<input type="color" data-prop="color2" value="${baseSettings.color2}"></label>
         <label>Angle:<input type="range" min="0" max="360" data-prop="angle" value="${baseSettings.angle}"></label>
       `;
-      // Attach listeners to new inputs
       basePanel.querySelectorAll('[data-prop]').forEach(el => {
         el.addEventListener('input', handleBaseChange);
         el.addEventListener('change', handleBaseChange);
       });
     }
 
-    // Render circle control panel
     function makePanel(c) {
       const div = document.createElement('div');
       div.className = 'panel';
@@ -88,146 +91,110 @@
         <label>DispScale:<input type="range" min="0" max="200" data-prop="scale" value="${c.scale}"></label>
         <label>Blur:<input type="range" min="0" max="50" data-prop="blur" value="${c.blur}"></label>
         <button data-move-up>↑</button><button data-move-down>↓</button>
-        <button data-remove>Remove</button>
+        <button data-duplicate>Dup</button><button data-remove>Remove</button>
       `;
       panels.appendChild(div);
     }
 
-    // Render all controls
     function renderControls() {
       panels.innerHTML = '';
       circles.forEach(makePanel);
       makeBasePanel();
     }
 
-    // Build SVG defs
     function buildDefs() {
       defs.innerHTML = '';
-      // Background gradient definition
-      if (baseSettings.type === 'gradient') {
-        const bgGrad = document.createElementNS(svgNS, 'linearGradient');
-        bgGrad.id = 'bgGrad';
-        bgGrad.setAttribute('x1', '0%'); bgGrad.setAttribute('y1', '0%');
-        bgGrad.setAttribute('x2', '100%'); bgGrad.setAttribute('y2', '0%');
-        bgGrad.setAttribute('gradientUnits', 'objectBoundingBox');
-        bgGrad.setAttribute('gradientTransform', `rotate(${baseSettings.angle},0.5,0.5)`);
-        const s1 = document.createElementNS(svgNS, 'stop');
-        s1.setAttribute('offset', '0%'); s1.setAttribute('stop-color', baseSettings.color1);
-        const s2 = document.createElementNS(svgNS, 'stop');
-        s2.setAttribute('offset', '100%'); s2.setAttribute('stop-color', baseSettings.color2);
-        bgGrad.appendChild(s1);
-        bgGrad.appendChild(s2);
-        defs.appendChild(bgGrad);
+      if(baseSettings.type==='gradient'){
+        const bgGrad = document.createElementNS(svgNS,'linearGradient');
+        bgGrad.id='bgGrad';
+        bgGrad.setAttribute('x1','0%'); bgGrad.setAttribute('y1','0%');
+        bgGrad.setAttribute('x2','100%'); bgGrad.setAttribute('y2','0%');
+        bgGrad.setAttribute('gradientUnits','objectBoundingBox');
+        bgGrad.setAttribute('gradientTransform',`rotate(${baseSettings.angle},0.5,0.5)`);
+        const s1=document.createElementNS(svgNS,'stop'); s1.setAttribute('offset','0%'); s1.setAttribute('stop-color',baseSettings.color1);
+        const s2=document.createElementNS(svgNS,'stop'); s2.setAttribute('offset','100%'); s2.setAttribute('stop-color',baseSettings.color2);
+        bgGrad.appendChild(s1); bgGrad.appendChild(s2); defs.appendChild(bgGrad);
       }
-      // Circle gradients & filters
-      circles.forEach(c => {
-        // Radial gradient
-        const grad = document.createElementNS(svgNS, 'radialGradient');
-        grad.id = `g${c.id}`;
-        const stop1 = document.createElementNS(svgNS, 'stop');
-        stop1.setAttribute('offset', '0%'); stop1.setAttribute('stop-color', c.color); stop1.setAttribute('stop-opacity', '1');
-        const stop2 = document.createElementNS(svgNS, 'stop');
-        stop2.setAttribute('offset', '100%'); stop2.setAttribute('stop-color', c.color); stop2.setAttribute('stop-opacity', '0');
-        grad.appendChild(stop1); grad.appendChild(stop2);
-        defs.appendChild(grad);
-        // Filter
-        const f = document.createElementNS(svgNS, 'filter');
-        f.id = `f${c.id}`;
-        f.setAttribute('filterUnits', 'userSpaceOnUse');
-        f.setAttribute('x', '-100%'); f.setAttribute('y', '-100%');
-        f.setAttribute('width', '300%'); f.setAttribute('height', '300%');
-        const turb = document.createElementNS(svgNS, 'feTurbulence');
-        turb.setAttribute('type', 'fractalNoise'); turb.setAttribute('baseFrequency', c.freq);
-        turb.setAttribute('numOctaves', '4'); turb.setAttribute('result', 'turb');
-        const disp = document.createElementNS(svgNS, 'feDisplacementMap');
-        disp.setAttribute('in', 'SourceGraphic'); disp.setAttribute('in2', 'turb'); disp.setAttribute('scale', c.scale); disp.setAttribute('result', 'disp');
-        const blur = document.createElementNS(svgNS, 'feGaussianBlur');
-        blur.setAttribute('in', 'disp'); blur.setAttribute('stdDeviation', c.blur);
-        f.appendChild(turb); f.appendChild(disp); f.appendChild(blur);
-        defs.appendChild(f);
+      circles.forEach(c=>{
+        const grad = document.createElementNS(svgNS,'radialGradient'); grad.id=`g${c.id}`;
+        const st1=document.createElementNS(svgNS,'stop'); st1.setAttribute('offset','0%'); st1.setAttribute('stop-color',c.color); st1.setAttribute('stop-opacity','1');
+        const st2=document.createElementNS(svgNS,'stop'); st2.setAttribute('offset','100%'); st2.setAttribute('stop-color',c.color); st2.setAttribute('stop-opacity','0');
+        grad.appendChild(st1); grad.appendChild(st2); defs.appendChild(grad);
+        const f=document.createElementNS(svgNS,'filter'); f.id=`f${c.id}`; f.setAttribute('filterUnits','userSpaceOnUse');
+        f.setAttribute('x','-100%'); f.setAttribute('y','-100%'); f.setAttribute('width','300%'); f.setAttribute('height','300%');
+        const turb=document.createElementNS(svgNS,'feTurbulence'); turb.setAttribute('type','fractalNoise'); turb.setAttribute('baseFrequency',c.freq);
+        turb.setAttribute('numOctaves','4'); turb.setAttribute('result','turb');
+        const disp=document.createElementNS(svgNS,'feDisplacementMap'); disp.setAttribute('in','SourceGraphic'); disp.setAttribute('in2','turb'); disp.setAttribute('scale',c.scale); disp.setAttribute('result','disp');
+        const blur=document.createElementNS(svgNS,'feGaussianBlur'); blur.setAttribute('in','disp'); blur.setAttribute('stdDeviation',c.blur);
+        f.appendChild(turb); f.appendChild(disp); f.appendChild(blur); defs.appendChild(f);
       });
     }
 
-    // Draw background rect
     function buildBackground() {
-      bgGrp.innerHTML = '';
-      const rect = document.createElementNS(svgNS, 'rect');
-      rect.setAttribute('x', 0); rect.setAttribute('y', 0);
-      rect.setAttribute('width', '100%'); rect.setAttribute('height', '100%');
-      rect.setAttribute('fill', baseSettings.type === 'color' ? baseSettings.color1 : 'url(#bgGrad)');
+      bgGrp.innerHTML='';
+      const rect=document.createElementNS(svgNS,'rect'); rect.setAttribute('x',0); rect.setAttribute('y',0);
+      rect.setAttribute('width','100%'); rect.setAttribute('height','100%');
+      rect.setAttribute('fill', baseSettings.type==='color'? baseSettings.color1 : 'url(#bgGrad)');
       bgGrp.appendChild(rect);
     }
 
-    // Draw circles
     function buildCircles() {
-      grp.innerHTML = '';
-      circles.forEach(c => {
-        const cir = document.createElementNS(svgNS, 'circle');
-        cir.setAttribute('cx', `${c.cx}%`);
-        cir.setAttribute('cy', `${c.cy}%`);
-        cir.setAttribute('r', `${c.r}%`);
-        cir.setAttribute('fill', `url(#g${c.id})`);
-        cir.setAttribute('filter', `url(#f${c.id})`);
-        cir.setAttribute('opacity', c.opacity);
-        cir.dataset.id = c.id;
-        grp.appendChild(cir);
-        cir.addEventListener('mousedown', () => dragging = c.id);
+      grp.innerHTML='';
+      circles.forEach(c=>{
+        const cir=document.createElementNS(svgNS,'circle');
+        cir.setAttribute('cx',`${c.cx}%`); cir.setAttribute('cy',`${c.cy}%`); cir.setAttribute('r',`${c.r}%`);
+        cir.setAttribute('fill',`url(#g${c.id})`); cir.setAttribute('filter',`url(#f${c.id})`); cir.setAttribute('opacity',c.opacity);
+        cir.dataset.id=c.id; grp.appendChild(cir);
+        cir.addEventListener('mousedown',()=>dragging=c.id);
       });
     }
 
-    // Full redraw
-    function redraw() {
-      buildDefs();
-      buildBackground();
-      buildCircles();
-      renderControls();
-    }
+    function redraw(){ buildDefs(); buildBackground(); buildCircles(); renderControls(); }
 
-    // Add new circle
-    document.getElementById('add').onclick = () => {
-      const id = Date.now();
-      circles.push({ id, cx:50, cy:50, r:20, color:'#ff0066', opacity:0.8, freq:0.02, scale:50, blur:15 });
-      redraw();
+    document.getElementById('add').onclick=()=>{
+      const id=Date.now(); circles.push({ id,cx:50,cy:50,r:20,color:'#ff0066',opacity:0.8,freq:0.02,scale:50,blur:15 });
+      saveState(); redraw();
     };
 
-    // Circle control handlers
-    panels.addEventListener('input', e => {
-      const panel = e.target.closest('.panel'); if(!panel) return;
-      const pid = +panel.dataset.id;
-      const prop = e.target.dataset.prop; if(!prop) return;
-      const val = prop === 'color' ? e.target.value : parseFloat(e.target.value);
-      circles = circles.map(c => c.id === pid ? { ...c, [prop]: val } : c);
-      buildDefs(); buildBackground(); buildCircles();
-    });
-    panels.addEventListener('click', e => {
-      const panel = e.target.closest('.panel'); if(!panel) return;
-      const pid = +panel.dataset.id;
-      if(e.target.dataset.remove !== undefined) { circles = circles.filter(c => c.id !== pid); redraw(); }
-      if(e.target.dataset.moveUp !== undefined) { const i = circles.findIndex(c => c.id === pid); if(i>0){ [circles[i-1], circles[i]] = [circles[i], circles[i-1]]; redraw(); }}
-      if(e.target.dataset.moveDown !== undefined) { const i = circles.findIndex(c => c.id === pid); if(i<circles.length-1){ [circles[i+1], circles[i]] = [circles[i], circles[i+1]]; redraw(); }}
+    panels.addEventListener('input',e=>{
+      const panel=e.target.closest('.panel'); if(!panel) return;
+      const pid=+panel.dataset.id; const prop=e.target.dataset.prop; if(!prop) return;
+      const val=prop==='color'?e.target.value:parseFloat(e.target.value);
+      circles=circles.map(c=>c.id===pid?{...c,[prop]:val}:c);
+      saveState(); buildDefs(); buildBackground(); buildCircles();
     });
 
-    // Dragging circles
-    window.addEventListener('mousemove', e => {
-      if(dragging === null) return;
-      const c = circles.find(x => x.id === dragging);
-      c.cx = e.clientX / window.innerWidth * 100;
-      c.cy = e.clientY / window.innerHeight * 100;
-      buildCircles();
+    panels.addEventListener('click',e=>{
+      const panel=e.target.closest('.panel'); if(!panel) return;
+      const pid=+panel.dataset.id;
+      if(e.target.dataset.remove!==undefined){ circles=circles.filter(c=>c.id!==pid); saveState(); redraw(); }
+      if(e.target.dataset.moveUp!==undefined){ const i=circles.findIndex(c=>c.id===pid); if(i>0){ [circles[i-1],circles[i]]= [circles[i],circles[i-1]]; saveState(); redraw(); }}
+      if(e.target.dataset.moveDown!==undefined){ const i=circles.findIndex(c=>c.id===pid); if(i<circles.length-1){ [circles[i+1],circles[i]]=[circles[i],circles[i+1]]; saveState(); redraw(); }}
+      if(e.target.dataset.duplicate!==undefined){
+        const orig=circles.find(c=>c.id===pid);
+        const copy={...orig,id:Date.now()};
+        const idx=circles.findIndex(c=>c.id===pid);
+        circles.splice(idx+1,0,copy);
+        saveState(); redraw();
+      }
     });
-    window.addEventListener('mouseup', () => dragging = null);
 
-    // Download SVG
-    document.getElementById('dl').onclick = () => {
-      const svg = document.getElementById('svgroot');
-      const s = '<?xml version="1.0"?>\n' + new XMLSerializer().serializeToString(svg);
-      const blob = new Blob([s], { type: 'image/svg+xml' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a'); a.href = url; a.download = 'gradients.svg';
-      document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+    window.addEventListener('mousemove',e=>{
+      if(dragging===null) return;
+      const c=circles.find(x=>x.id===dragging);
+      c.cx=e.clientX/window.innerWidth*100; c.cy=e.clientY/window.innerHeight*100;
+      saveState(); buildCircles();
+    });
+    window.addEventListener('mouseup',()=>dragging=null);
+
+    document.getElementById('dl').onclick=()=>{
+      const svg=document.getElementById('svgroot');
+      const s='<?xml version="1.0"?>\n'+new XMLSerializer().serializeToString(svg);
+      const blob=new Blob([s],{type:'image/svg+xml'});
+      const url=URL.createObjectURL(blob);
+      const a=document.createElement('a'); a.href=url; a.download='gradients.svg'; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
     };
 
-    // Init
     redraw();
   </script>
 </body>
